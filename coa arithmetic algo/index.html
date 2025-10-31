@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COA Algorithm Visualizer</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts (Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Custom scrollbar styling for the dark theme */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #374151; /* Gray-700 */
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background-color: #111827; /* Gray-900 */
+        }
+        
+        /* Custom styling for the dropdown to match the screenshot */
+        select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url('data:image/svg+xml;utf8,<svg fill="white" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 1.5em;
+            padding-right: 2.5rem; /* Make space for the icon */
+        }
+
+        /* Styling for register boxes */
+        .register-box {
+            background-color: #1f2937; /* Gray-800 */
+            border: 1px solid #374151; /* Gray-700 */
+        }
+        .register-label {
+            color: #9ca3af; /* Gray-400 */
+        }
+
+        /* Bit size button styling */
+        .bit-size-btn.active {
+            background-color: #06b6d4; /* accent (cyan-500) */
+            color: #0f172a; /* primary-dark (slate-900) */
+            font-weight: 600;
+        }
+        .bit-size-btn.inactive {
+            background-color: #374151; /* Gray-700 */
+            color: #d1d5db; /* Gray-300 */
+        }
+        .bit-size-btn.inactive:hover {
+            background-color: #4b5563; /* Gray-600 */
+        }
+    </style>
+    
+    <script>
+        // Configure Tailwind
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-dark': '#0f172a', /* slate-900 - Darker background */
+                        'card-dark': '#1e293b',   /* slate-800 - Card background */
+                        'accent': '#06b6d4',      /* cyan-500 */
+                        'accent-hover': '#0891b2' /* cyan-600 */
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-primary-dark text-gray-200 min-h-screen p-4 sm:p-8 font-sans">
+
+    <!-- Global State Variables -->
+    <script>
+        let SIMULATION_STEPS = [];
+        let CURRENT_STEP_INDEX = 0;
+        let BIT_SIZE = 8;
+        let animationInterval = null;
+
+        // Algorithm descriptions
+        const ALGO_DESCRIPTIONS = {
+            'booth': {
+                name: "Booth's Algorithm (Signed)",
+                desc: "Efficiently multiplies signed binary numbers using shift and add/subtract operations based on bit pairs."
+            },
+            'restoring': {
+                name: "Restoring Division",
+                desc: "Classic division algorithm that restores the accumulator when the result is negative after subtraction."
+            },
+            'non-restoring': {
+                name: "Non-Restoring Division",
+                desc: "A faster division method that avoids the restoring step, correcting the result at the end if needed."
+            },
+            'shift-add': {
+                name: "Unsigned Multiplication (Shift-and-Add)",
+                desc: "A fundamental algorithm that mimics manual multiplication by shifting and adding the multiplicand."
+            },
+            'fast-booth': {
+                name: "Fast Booth Recoding",
+                desc: "An optimized version of Booth's algorithm that processes bits in larger groups (recoding) for fewer steps."
+            }
+        };
+    </script>
+
+    <div class="max-w-7xl mx-auto">
+        <!-- Title & Subtitle -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl sm:text-5xl font-extrabold text-accent tracking-wider">COA Algorithm Visualizer</h1>
+            <p class="text-gray-400 mt-2 text-sm sm:text-base">Interactive Visualization of Computer Organization & Architecture arithmetic algorithms</p>
+        </header>
+
+        <!-- Algorithm Selector Panel (Full Width) -->
+        <div class="bg-card-dark p-5 rounded-xl shadow-lg border border-gray-700 mb-6">
+            <label for="algorithm-select" class="block text-sm font-medium text-gray-400 mb-2">Select Algorithm</label>
+            <select id="algorithm-select" onchange="updateAlgorithmDescription()" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-gray-200 focus:ring-accent focus:border-accent transition duration-150 ease-in-out">
+                <option value="restoring" disabled>Restoring Division</option>
+                <option value="non-restoring" disabled>Non-Restoring Division</option>
+                <option value="shift-add" disabled>Unsigned Multiplication (Shift-and-Add)</option>
+                <option value="booth" selected>Booth's Algorithm (Signed)</option>
+                <option value="fast-booth" disabled>Fast Booth Recoding</option>
+            </select>
+
+            <div class="mt-4 p-4 bg-gray-700 rounded-lg">
+                <h3 id="algo-name" class="font-medium text-accent">Booth's Algorithm (Signed)</h3>
+                <p id="algo-desc" class="text-sm text-gray-400 mt-1">Efficiently multiplies signed binary numbers using shift and add/subtract operations based on bit pairs.</p>
+            </div>
+        </div>
+
+        <!-- Main Content Grid (Input/Controls | Visualization) -->
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Column 1: Input & Controls -->
+            <div class="lg:col-span-1 space-y-6">
+
+                <!-- Input Panel -->
+                <div class="bg-card-dark p-5 rounded-xl shadow-lg border border-gray-700">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Input</h2>
+                    
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Bit Size</label>
+                    <div class="flex space-x-2 mb-4">
+                        <button class="bit-size-btn inactive p-2 rounded-lg font-medium transition duration-150 flex-1" data-size="4">4-bit</button>
+                        <button class="bit-size-btn active p-2 rounded-lg font-medium transition duration-150 flex-1" data-size="8">8-bit</button>
+                        <button class="bit-size-btn inactive p-2 rounded-lg font-medium transition duration-150 flex-1" data-size="16">16-bit</button>
+                    </div>
+
+                    <label for="multiplicand" class="block text-sm font-medium text-gray-400">Multiplicand (M)</label>
+                    <input type="number" id="multiplicand" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-gray-200 mt-1 mb-4 focus:ring-accent focus:border-accent transition duration-150" placeholder="Enter number">
+                    <p id="multiplicand-info" class="text-xs text-gray-500 mb-4"></p>
+
+                    <label for="multiplier" class="block text-sm font-medium text-gray-400">Multiplier (Q)</label>
+                    <input type="number" id="multiplier" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 text-gray-200 mt-1 mb-4 focus:ring-accent focus:border-accent transition duration-150" placeholder="Enter number">
+                    <p id="multiplier-info" class="text-xs text-gray-500 mb-4"></p>
+
+                    <div class="flex space-x-3">
+                        <button id="start-btn" onclick="startSimulation()" class="flex-1 flex items-center justify-center p-3 rounded-lg font-bold bg-accent text-primary-dark hover:bg-accent-hover transition duration-150 shadow-md">
+                            <svg class="w-5 h-5 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                            Start
+                        </button>
+                        <!-- Note: 'Shuffle' button is not implemented, 'Reset' is -->
+                        <button class="p-3 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition duration-150 shadow-md opacity-50 cursor-not-allowed" title="Shuffle (Not Implemented)">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 3h5v5M4 20L20 4M20 16v5h-5M4 4l5 5"></path></svg>
+                        </button>
+                        <button id="reset-btn" onclick="resetSimulation()" class="p-3 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition duration-150 shadow-md" title="Reset">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 19m0 0H9m11-4.418c0-3.314-2.686-6-6-6-1.657 0-3.15.67-4.243 1.757L8.243 12z"></path></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Controls Panel -->
+                <div class="bg-card-dark p-5 rounded-xl shadow-lg border border-gray-700">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Controls</h2>
+                    <div id="step-info" class="flex justify-between items-center text-sm font-medium text-gray-300 mb-2">
+                        <span id="current-step-display">Step 0 of 0</span>
+                        <span id="progress-percent">0%</span>
+                    </div>
+                    <div id="progress-bar" class="w-full bg-gray-700 rounded-full h-1.5 mb-4">
+                        <div id="progress-fill" class="bg-accent h-1.5 rounded-full" style="width: 0%"></div>
+                    </div>
+
+                    <div class="flex justify-center space-x-3 mb-4">
+                        <button onclick="gotoPreviousStep()" class="p-3 rounded-full bg-gray-700 text-gray-300 hover:bg-gray-600 transition duration-150" title="Previous Step">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg>
+                        </button>
+                        <button id="play-pause-btn" onclick="togglePlayPause()" class="w-14 h-14 p-3 rounded-full bg-accent text-primary-dark hover:bg-accent-hover transition duration-150 shadow-lg flex items-center justify-center" title="Play">
+                            <svg id="play-icon" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                            <svg id="pause-icon" class="w-6 h-6 hidden" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                        </button>
+                        <button onclick="gotoNextStep()" class="p-3 rounded-full bg-gray-700 text-gray-300 hover:bg-gray-600 transition duration-150" title="Next Step">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
+                        </button>
+                        <button onclick="resetSimulation(true)" class="p-3 rounded-full bg-gray-700 text-gray-300 hover:bg-gray-600 transition duration-150" title="Go to Start">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                        </button>
+                    </div>
+
+                    <label for="speed-slider" class="block text-sm font-medium text-gray-400 mb-2">Speed (<span id="speed-value">1x</span>)</label>
+                    <input type="range" id="speed-slider" min="0.25" max="2" step="0.25" value="1" onchange="updateSpeed()" oninput="document.getElementById('speed-value').textContent = this.value + 'x';" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer range-lg accent-accent">
+                </div>
+            </div>
+
+            <!-- Column 2: Visualization Area -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- Placeholder View -->
+                <div id="placeholder-view" class="bg-card-dark p-5 rounded-xl shadow-lg border border-gray-700 h-96 flex items-center justify-center">
+                    <p class="text-xl text-gray-400">Enter values and click Start to begin the simulation</p>
+                </div>
+
+                <!-- Simulation View (Hidden by default) -->
+                <div id="simulation-view" class="space-y-6 hidden">
+                    <!-- Registers Panel -->
+                    <div class="bg-card-dark p-5 rounded-xl shadow-lg border border-gray-700">
+                        <h2 class="text-xl font-semibold mb-4 text-white">Registers</h2>
+                        <div class="grid grid-cols-2 gap-4">
+                            <!-- AC Register -->
+                            <div class="col-span-2 sm:col-span-1">
+                                <label class="register-label text-sm font-medium">AC (A)</label>
+                                <div id="reg-A" class="register-box p-3 rounded-lg overflow-x-auto font-mono text-lg text-green-400">00000000</div>
+                            </div>
+                            <!-- QR Register -->
+                            <div class="col-span-2 sm:col-span-1">
+                                <label class="register-label text-sm font-medium">QR (Q) & Q$_{-\mathbf{1}}$</label>
+                                <div class="flex space-x-2">
+                                    <div id="reg-Q" class="register-box flex-1 p-3 rounded-lg overflow-x-auto font-mono text-lg text-green-400">00000000</div>
+                                    <div id="reg-Q1" class="register-box w-12 p-3 rounded-lg text-center font-mono text-lg text-yellow-400">0</div>
+                                </div>
+                            </div>
+                            <!-- M Register -->
+                            <div class="col-span-2 sm:col-span-1">
+                                <label class="register-label text-sm font-medium">M (Multiplicand)</label>
+                                <div id="reg-M" class="register-box p-3 rounded-lg overflow-x-auto font-mono text-lg text-green-400">00000000</div>
+                            </div>
+                            <!-- M-bar + 1 Register (Twos Complement of M) -->
+                            <div class="col-span-2 sm:col-span-1">
+                                <label class="register-label text-sm font-medium">$\overline{\text{M}}+\mathbf{1}$ (Used for Subtraction)</label>
+                                <div id="reg-M-bar" class="register-box p-3 rounded-lg overflow-x-auto font-mono text-lg text-red-400">00000000</div>
+                            </div>
+                            <!-- Count Register -->
+                            <div class="col-span-2">
+                                <label class="register-label text-sm font-medium">Count (n)</label>
+                                <div id="reg-Count" class="register-box p-3 rounded-lg text-center font-mono text-lg text-accent">8</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step Description Panel -->
+                    <div class="bg-card-dark p-5 rounded-xl shadow-lg border border-gray-700">
+                        <h2 class="text-xl font-semibold mb-3 text-white">Current Step</h2>
+                        <p id="current-action" class="text-lg font-medium text-gray-300">
+                            Simulation initialized.
+                        </p>
+                        <div class="mt-4 p-3 bg-gray-700 rounded-lg">
+                            <p class="text-sm font-mono text-yellow-400">
+                                Check: ($\mathbf{Q_0, Q_{-1}}$) = <span id="q-pair">--</span>
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Output Panel -->
+                    <div class="bg-card-dark p-5 rounded-xl shadow-lg border border-gray-700">
+                        <h2 class="text-xl font-semibold mb-3 text-white">Output</h2>
+                        
+                        <label class="register-label text-sm font-medium">Final Product (Binary: A $\cdot$ Q)</label>
+                        <div id="final-binary" class="register-box p-3 rounded-lg overflow-x-auto font-mono text-lg text-white mb-4">
+                            ----------------
+                        </div>
+                        
+                        <label class="register-label text-sm font-medium">Final Product (Decimal)</label>
+                        <div id="final-decimal" class="register-box p-3 rounded-lg text-lg text-accent font-semibold">
+                            ---
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // --- Utility Functions ---
+        
+        function decToTwosComplement(dec, bits) {
+            const maxVal = Math.pow(2, bits);
+            let val = dec;
+            if (dec >= 0) {
+                return val.toString(2).padStart(bits, '0');
+            } else {
+                val = maxVal + dec;
+                return val.toString(2).padStart(bits, '0');
+            }
+        }
+
+        function twosComplement(bin) {
+            const bits = bin.length;
+            let onesComplement = '';
+            for (let i = 0; i < bits; i++) {
+                onesComplement += (bin[i] === '0' ? '1' : '0');
+            }
+            let carry = 1;
+            let result = '';
+            for (let i = bits - 1; i >= 0; i--) {
+                const bit = parseInt(onesComplement[i]);
+                const sum = bit + carry;
+                result = (sum % 2) + result;
+                carry = Math.floor(sum / 2);
+            }
+            return result;
+        }
+
+        function binAdd(bin1, bin2) {
+            const bits = bin1.length;
+            let carry = 0;
+            let sum = '';
+            for (let i = bits - 1; i >= 0; i--) {
+                const b1 = parseInt(bin1[i]);
+                const b2 = parseInt(bin2[i]);
+                const total = b1 + b2 + carry;
+                sum = (total % 2) + sum;
+                carry = (total >= 2) ? 1 : 0;
+            }
+            return sum;
+        }
+
+        function arithmeticShiftRight(A, Q, Q_1) {
+            const new_Q_1 = Q[Q.length - 1];
+            const new_A = A[0] + A.substring(0, A.length - 1);
+            const new_Q = new_A[new_A.length - 1] + Q.substring(0, Q.length - 1);
+            return { new_A, new_Q, new_Q_1 };
+        }
+
+        function twosComplementToDec(bin) {
+            const bits = bin.length;
+            const signBit = parseInt(bin[0]);
+            if (signBit === 0) {
+                return parseInt(bin, 2);
+            } else {
+                const magnitude = twosComplement(bin);
+                return -parseInt(magnitude, 2);
+            }
+        }
+        
+        // --- Simulation Logic ---
+
+        function runBoothAlgorithm(M_dec, Q_dec, bitSize) {
+            const n = bitSize;
+            const M_bin = decToTwosComplement(M_dec, n);
+            const Q_bin = decToTwosComplement(Q_dec, n);
+            const M_bar_plus_1 = twosComplement(M_bin);
+            
+            let A = '0'.repeat(n);
+            let Q = Q_bin;
+            let Q_1 = '0';
+            let Count = n;
+            const steps = [];
+
+            steps.push({
+                step: 0, count: n, action: "Initialization: Set registers and variables.",
+                A: A, Q: Q, M: M_bin, M_bar_plus_1: M_bar_plus_1, Q_1: Q_1, q_pair: Q[n-1] + Q_1,
+            });
+
+            let stepCounter = 1;
+            while (Count > 0) {
+                const Q0 = Q[n - 1];
+                const Q_1_val = Q_1;
+                const pair = Q0 + Q_1_val;
+                let actionText = '';
+                let new_A = A;
+
+                if (pair === '01') {
+                    new_A = binAdd(A, M_bin);
+                    actionText = `Check: (Q\u2080, Q\u208b\u2081) = 01. Add M to A (A \u2190 A + M). ${A} + ${M_bin}`;
+                } else if (pair === '10') {
+                    new_A = binAdd(A, M_bar_plus_1);
+                    actionText = `Check: (Q\u2080, Q\u208b\u2081) = 10. Subtract M from A (A \u2190 A + \u007eM + 1). ${A} + ${M_bar_plus_1}`;
+                } else {
+                    new_A = A;
+                    actionText = `Check: (Q\u2080, Q\u208b\u2081) = ${pair}. No arithmetic operation.`;
+                }
+
+                steps.push({
+                    step: stepCounter++, count: Count, action: actionText,
+                    A: new_A, Q: Q, M: M_bin, M_bar_plus_1: M_bar_plus_1, Q_1: Q_1, q_pair: pair,
+                });
+                
+                A = new_A;
+                const { new_A: shifted_A, new_Q: shifted_Q, new_Q_1 } = arithmeticShiftRight(A, Q, Q_1);
+                Count--;
+                
+                actionText = `Arithmetic Shift Right (ASR) A, Q, Q\u208b\u2081 and Decrement Count (${Count+1} \u2192 ${Count}).`;
+                
+                steps.push({
+                    step: stepCounter++, count: Count, action: actionText,
+                    A: shifted_A, Q: shifted_Q, M: M_bin, M_bar_plus_1: M_bar_plus_1, Q_1: new_Q_1,
+                    q_pair: shifted_Q[n-1] + new_Q_1, shift_highlight: true,
+                });
+
+                A = shifted_A; Q = shifted_Q; Q_1 = new_Q_1;
+            }
+
+            const finalBinary = A + Q;
+            const finalDecimal = twosComplementToDec(finalBinary);
+            
+            steps.push({
+                step: stepCounter, count: 0, action: `Completed! Final Product is the concatenation of A and Q.`,
+                A: A, Q: Q, M: M_bin, M_bar_plus_1: M_bar_plus_1, Q_1: Q_1,
+                q_pair: '--', finalBinary: finalBinary, finalDecimal: finalDecimal,
+            });
+            return steps;
+        }
+
+        // --- UI Update and Control Functions ---
+
+        function updateUI(step) {
+            if (!step) return;
+
+            document.getElementById('reg-A').textContent = step.A;
+            document.getElementById('reg-Q').textContent = step.Q;
+            document.getElementById('reg-Q1').textContent = step.Q_1;
+            document.getElementById('reg-Count').textContent = step.count;
+            document.getElementById('reg-M').textContent = step.M;
+            document.getElementById('reg-M-bar').textContent = step.M_bar_plus_1;
+            
+            document.getElementById('current-action').textContent = `${step.step}. ${step.action}`;
+            document.getElementById('q-pair').textContent = step.q_pair || '--';
+
+            const aReg = document.getElementById('reg-A');
+            const qReg = document.getElementById('reg-Q');
+            const q1Reg = document.getElementById('reg-Q1');
+            [aReg, qReg, q1Reg].forEach(el => el.classList.remove('animate-pulse', 'bg-gray-700'));
+            if (step.shift_highlight) {
+                 [aReg, qReg, q1Reg].forEach(el => el.classList.add('animate-pulse', 'bg-gray-700'));
+            }
+
+            const totalSteps = SIMULATION_STEPS.length - 1;
+            const currentStep = (SIMULATION_STEPS.length > 0) ? SIMULATION_STEPS.indexOf(step) : 0;
+            
+            document.getElementById('current-step-display').textContent = `Step ${currentStep} of ${totalSteps}`;
+            const progress = (totalSteps > 0) ? Math.floor((currentStep / totalSteps) * 100) : 0;
+            document.getElementById('progress-percent').textContent = `${progress}%`;
+            document.getElementById('progress-fill').style.width = `${progress}%`;
+            
+            if (step.finalBinary) {
+                document.getElementById('final-binary').textContent = step.finalBinary.replace(new RegExp(`(.{${BIT_SIZE}})(.{${BIT_SIZE}})`), '$1 $2');
+                document.getElementById('final-decimal').textContent = step.finalDecimal;
+            } else {
+                document.getElementById('final-binary').textContent = '-'.repeat(BIT_SIZE * 2);
+                document.getElementById('final-decimal').textContent = '---';
+            }
+        }
+        
+        function updateBitInfo() {
+            const maxVal = Math.pow(2, BIT_SIZE - 1) - 1;
+            const minVal = -Math.pow(2, BIT_SIZE - 1);
+            document.getElementById('multiplicand-info').textContent = `Range: ${minVal} to ${maxVal}.`;
+            document.getElementById('multiplier-info').textContent = `Range: ${minVal} to ${maxVal}.`;
+            
+            document.querySelectorAll('.bit-size-btn').forEach(btn => {
+                btn.classList.remove('active', 'inactive');
+                btn.classList.add(parseInt(btn.dataset.size) === BIT_SIZE ? 'active' : 'inactive');
+            });
+            resetSimulation(false); // Reset UI without alert
+        }
+
+        function setBitSize(size) {
+            BIT_SIZE = size;
+            updateBitInfo();
+        }
+
+        function updateAlgorithmDescription() {
+            const selectedValue = document.getElementById('algorithm-select').value;
+            const algoInfo = ALGO_DESCRIPTIONS[selectedValue];
+            document.getElementById('algo-name').textContent = algoInfo.name;
+            document.getElementById('algo-desc').textContent = algoInfo.desc;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.bit-size-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => setBitSize(parseInt(e.target.dataset.size)));
+            });
+            updateBitInfo();
+            updateAlgorithmDescription();
+        });
+
+        // --- Main Control Functions ---
+
+        function startSimulation() {
+            if (animationInterval) togglePlayPause(); // Stop animation
+
+            const M_dec_val = document.getElementById('multiplicand').value;
+            const Q_dec_val = document.getElementById('multiplier').value;
+
+            if (M_dec_val === "" || Q_dec_val === "") {
+                alertUser("Please enter values for Multiplicand and Multiplier.", "warning");
+                return;
+            }
+            
+            const M_dec = parseInt(M_dec_val);
+            const Q_dec = parseInt(Q_dec_val);
+
+            if (isNaN(M_dec) || isNaN(Q_dec)) {
+                alertUser("Please enter valid numbers.", "warning");
+                return;
+            }
+
+            // Check range
+            const maxVal = Math.pow(2, BIT_SIZE - 1) - 1;
+            const minVal = -Math.pow(2, BIT_SIZE - 1);
+            if (M_dec < minVal || M_dec > maxVal || Q_dec < minVal || Q_dec > maxVal) {
+                 alertUser(`Values must be within the ${BIT_SIZE}-bit range (${minVal} to ${maxVal}).`, "warning");
+                 return;
+            }
+
+            // Switch to simulation view
+            document.getElementById('placeholder-view').classList.add('hidden');
+            document.getElementById('simulation-view').classList.remove('hidden');
+
+            SIMULATION_STEPS = runBoothAlgorithm(M_dec, Q_dec, BIT_SIZE);
+            CURRENT_STEP_INDEX = 0;
+            updateUI(SIMULATION_STEPS[CURRENT_STEP_INDEX]);
+            
+            document.getElementById('start-btn').textContent = 'Restart';
+            alertUser(`Simulation initialized for ${M_dec} x ${Q_dec} (${BIT_SIZE}-bit).`, "success");
+        }
+
+        function resetSimulation(showAlert = true) {
+            if (animationInterval) togglePlayPause();
+            
+            SIMULATION_STEPS = [];
+            CURRENT_STEP_INDEX = 0;
+            
+            updateUI({
+                step: 0, count: BIT_SIZE, action: "Simulation reset.",
+                A: '0'.repeat(BIT_SIZE), Q: '0'.repeat(BIT_SIZE), M: '0'.repeat(BIT_SIZE), 
+                M_bar_plus_1: '0'.repeat(BIT_SIZE), Q_1: '0', q_pair: '--'
+            });
+
+            // Switch back to placeholder view
+            document.getElementById('placeholder-view').classList.remove('hidden');
+            document.getElementById('simulation-view').classList.add('hidden');
+
+            document.getElementById('start-btn').textContent = 'Start';
+            document.getElementById('final-binary').textContent = '-'.repeat(BIT_SIZE * 2);
+            document.getElementById('final-decimal').textContent = '---';
+            
+            if (showAlert) alertUser("Simulation state reset.", "info");
+        }
+
+        function gotoNextStep() {
+            if (SIMULATION_STEPS.length === 0) {
+                alertUser("Please click 'Start' first to initialize.", "warning");
+                return;
+            }
+            if (CURRENT_STEP_INDEX < SIMULATION_STEPS.length - 1) {
+                CURRENT_STEP_INDEX++;
+                updateUI(SIMULATION_STEPS[CURRENT_STEP_INDEX]);
+                if (CURRENT_STEP_INDEX === SIMULATION_STEPS.length - 1) {
+                    if (animationInterval) togglePlayPause();
+                    alertUser("Simulation completed!", "success");
+                }
+            }
+        }
+
+        function gotoPreviousStep() {
+            if (SIMULATION_STEPS.length === 0) return;
+            if (CURRENT_STEP_INDEX > 0) {
+                if (animationInterval) togglePlayPause();
+                CURRENT_STEP_INDEX--;
+                updateUI(SIMULATION_STEPS[CURRENT_STEP_INDEX]);
+            }
+        }
+
+        function togglePlayPause() {
+            if (SIMULATION_STEPS.length === 0) {
+                 alertUser("Please click 'Start' first to initialize.", "warning");
+                return;
+            }
+            const playIcon = document.getElementById('play-icon');
+            const pauseIcon = document.getElementById('pause-icon');
+
+            if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+            } else {
+                if (CURRENT_STEP_INDEX >= SIMULATION_STEPS.length - 1) {
+                    CURRENT_STEP_INDEX = 0; // Restart if at end
+                }
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+                
+                const speed = parseFloat(document.getElementById('speed-slider').value);
+                const delay = 1500 / speed;
+                
+                // Run the first step immediately
+                gotoNextStep();
+                animationInterval = setInterval(gotoNextStep, delay);
+            }
+        }
+        
+        function updateSpeed() {
+             if (animationInterval) {
+                 togglePlayPause(); // Pause
+                 togglePlayPause(); // Resume with new speed
+             }
+        }
+
+        function alertUser(message, type = "info") {
+            const colors = {
+                success: 'bg-green-600',
+                warning: 'bg-yellow-600',
+                info: 'bg-blue-600',
+            };
+            const msgBox = document.createElement('div');
+            msgBox.className = `${colors[type]} fixed top-5 right-5 z-50 p-4 rounded-lg shadow-xl text-white font-semibold transform transition-all duration-300 ease-in-out opacity-0 translate-x-10`;
+            msgBox.textContent = message;
+            
+            document.body.appendChild(msgBox);
+            
+            // Animate in
+            setTimeout(() => {
+                 msgBox.classList.remove('opacity-0', 'translate-x-10');
+            }, 50);
+
+            // Animate out
+            setTimeout(() => {
+                msgBox.classList.add('opacity-0', 'translate-x-10');
+                msgBox.addEventListener('transitionend', () => msgBox.remove());
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
